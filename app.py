@@ -318,10 +318,9 @@ if show_fundamental:
     with st.spinner("財務データ取得中..."):
         fund = fetch_fundamentals(main_ticker)
 
-    annual_df    = fund["annual_df"]
-    quarterly_df = fund["quarterly_df"]
+    annual_df = fund["annual_df"]
 
-    if annual_df.empty and quarterly_df.empty:
+    if annual_df.empty:
         st.warning("財務データを取得できませんでした。")
     else:
         fund_fig = build_fundamental_chart(fund, main_df, main_name)
@@ -330,39 +329,21 @@ if show_fundamental:
 
         # データテーブル（展開式）
         with st.expander("財務データ（数値）"):
-            col_a, col_q = st.columns(2)
-            with col_a:
-                st.caption("年次")
-                show_cols = [c for c in ["Revenue", "OperatingIncome", "EPS", "Price", "PER"]
-                             if c in annual_df.columns]
-                if show_cols:
-                    unit = fund["unit"]
-                    divisor = 1e12 if unit == "兆円" else 1e8
-                    disp = annual_df[show_cols].copy()
-                    for c in ["Revenue", "OperatingIncome"]:
-                        if c in disp.columns:
-                            disp[c] = (disp[c] / divisor).map(lambda x: f"{x:,.2f}" if pd.notna(x) else "-")
-                    for c in ["EPS", "Price"]:
-                        if c in disp.columns:
-                            disp[c] = disp[c].map(lambda x: f"{x:,.1f}" if pd.notna(x) else "-")
-                    if "PER" in disp.columns:
-                        disp["PER"] = disp["PER"].map(lambda x: f"{x:.1f}倍" if pd.notna(x) else "-")
-                    disp.index = disp.index.strftime("%Y/%m")
-                    st.dataframe(disp, use_container_width=True)
-            with col_q:
-                st.caption("四半期")
-                show_cols_q = [c for c in ["PER", "PBR", "BPS", "Price"]
-                               if c in quarterly_df.columns]
-                if show_cols_q:
-                    disp_q = quarterly_df[show_cols_q].copy()
-                    for c in ["PER"]:
-                        if c in disp_q.columns:
-                            disp_q[c] = disp_q[c].map(lambda x: f"{x:.1f}倍" if pd.notna(x) else "-")
-                    for c in ["PBR"]:
-                        if c in disp_q.columns:
-                            disp_q[c] = disp_q[c].map(lambda x: f"{x:.2f}倍" if pd.notna(x) else "-")
-                    for c in ["BPS", "Price"]:
-                        if c in disp_q.columns:
-                            disp_q[c] = disp_q[c].map(lambda x: f"{x:,.0f}" if pd.notna(x) else "-")
-                    disp_q.index = disp_q.index.strftime("%Y/%m")
-                    st.dataframe(disp_q, use_container_width=True)
+            show_cols = [c for c in ["Revenue", "OperatingIncome", "EPS", "BPS", "Price", "PER", "PBR"]
+                         if c in annual_df.columns]
+            if show_cols:
+                unit = fund["unit"]
+                divisor = 1e12 if unit == "兆円" else 1e8
+                disp = annual_df[show_cols].copy()
+                for c in ["Revenue", "OperatingIncome"]:
+                    if c in disp.columns:
+                        disp[c] = (disp[c] / divisor).map(lambda x: f"{x:,.2f}" if pd.notna(x) else "-")
+                for c in ["EPS", "BPS", "Price"]:
+                    if c in disp.columns:
+                        disp[c] = disp[c].map(lambda x: f"{x:,.1f}" if pd.notna(x) else "-")
+                if "PER" in disp.columns:
+                    disp["PER"] = disp["PER"].map(lambda x: f"{x:.1f}倍" if pd.notna(x) else "-")
+                if "PBR" in disp.columns:
+                    disp["PBR"] = disp["PBR"].map(lambda x: f"{x:.2f}倍" if pd.notna(x) else "-")
+                disp.index = disp.index.strftime("%Y/%m")
+                st.dataframe(disp, use_container_width=True)

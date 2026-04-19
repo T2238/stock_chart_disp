@@ -334,23 +334,21 @@ def build_fundamental_chart(
     3段構成のファンダメンタルチャートを返す。
       Row1: 株価（折れ線）+ 決算期末の縦線
       Row2: 売上・営業利益（年次棒グラフ）
-      Row3: PER（折れ線）+ PBR（折れ線、右軸）
+      Row3: PER・PBR（年次折れ線）
     """
-    annual_df    = fundamentals["annual_df"]
-    quarterly_df = fundamentals["quarterly_df"]
-    unit         = fundamentals["unit"]
+    annual_df = fundamentals["annual_df"]
+    unit      = fundamentals["unit"]
 
     fig = make_subplots(
         rows=3, cols=1,
         shared_xaxes=False,
         vertical_spacing=0.08,
         row_heights=[0.35, 0.35, 0.30],
-        subplot_titles=["株価推移（決算期末●）", f"売上・営業利益（年次 / {unit}）", "PER・PBR（四半期）"],
+        subplot_titles=["株価推移（決算期末●）", f"売上・営業利益（年次 / {unit}）", "PER・PBR（年次）"],
     )
 
     # ---- Row1: 株価折れ線 ----
     price_close = _normalize_df(price_df)["Close"].squeeze().dropna()
-    # 財務データのある期間に絞る
     if not annual_df.empty:
         start = annual_df.index.min() - pd.Timedelta(days=90)
         price_close = price_close[price_close.index >= start]
@@ -362,14 +360,12 @@ def build_fundamental_chart(
         hovertemplate="株価: ¥%{y:,.0f}<extra></extra>",
     ), row=1, col=1)
 
-    # 決算期末に縦線マーカー
     for d in annual_df.index:
         fig.add_vline(
             x=d.timestamp() * 1000,
             line=dict(color="rgba(251,191,36,0.4)", width=1, dash="dot"),
             row=1, col=1,
         )
-    # 決算期末の株価をマーカーで表示
     prices_at_term = annual_df["Price"].dropna()
     fig.add_trace(go.Scatter(
         x=prices_at_term.index, y=prices_at_term,
@@ -402,12 +398,9 @@ def build_fundamental_chart(
             hovertemplate=f"営業利益: %{{y:,.2f}}{unit}<extra></extra>",
         ), row=2, col=1)
 
-    # ---- Row3: PER・PBR（四半期折れ線）----
-    per_src = quarterly_df if ("PER" in quarterly_df.columns and not quarterly_df["PER"].dropna().empty) \
-              else annual_df
-
-    if "PER" in per_src.columns:
-        per = per_src["PER"].dropna()
+    # ---- Row3: PER・PBR（年次折れ線）----
+    if "PER" in annual_df.columns:
+        per = annual_df["PER"].dropna()
         fig.add_trace(go.Scatter(
             x=per.index, y=per,
             name="PER（倍）",
@@ -415,8 +408,8 @@ def build_fundamental_chart(
             hovertemplate="PER: %{y:.1f}倍<extra></extra>",
         ), row=3, col=1)
 
-    if "PBR" in quarterly_df.columns:
-        pbr = quarterly_df["PBR"].dropna()
+    if "PBR" in annual_df.columns:
+        pbr = annual_df["PBR"].dropna()
         fig.add_trace(go.Scatter(
             x=pbr.index, y=pbr,
             name="PBR（倍）",
@@ -424,7 +417,6 @@ def build_fundamental_chart(
             yaxis="y6",
             hovertemplate="PBR: %{y:.2f}倍<extra></extra>",
         ), row=3, col=1)
-        # PBR 用の右 y 軸を追加
         fig.update_layout(
             yaxis6=dict(
                 title="PBR（倍）",

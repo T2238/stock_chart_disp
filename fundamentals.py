@@ -21,11 +21,10 @@ _RATE_LIMIT_MSG = (
 )
 
 # 財務列の優先順位リスト（見つかった最初の列を使用）
-_REVENUE_COLS    = ["Total Revenue", "Operating Revenue"]
-_OP_INCOME_COLS  = ["Operating Income", "EBIT"]
-_NET_INCOME_COLS = ["Net Income"]
-_EPS_COLS        = ["Diluted EPS", "Basic EPS"]
-_EQUITY_COLS     = ["Common Stock Equity", "Stockholders Equity"]
+_REVENUE_COLS   = ["Total Revenue", "Operating Revenue"]
+_OP_INCOME_COLS = ["Operating Income", "EBIT"]
+_EPS_COLS       = ["Diluted EPS", "Basic EPS"]
+_EQUITY_COLS    = ["Common Stock Equity", "Stockholders Equity"]
 
 
 def _first(df: pd.DataFrame, candidates: list[str]) -> pd.Series | None:
@@ -68,20 +67,18 @@ def _format_unit(series: pd.Series) -> tuple[pd.Series, str]:
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_fundamentals(ticker: str) -> dict:
     """
-    年次・四半期の財務データを取得して返す。
+    年次財務データを取得して返す。
     戻り値:
-      annual_df   : 年次 DataFrame (index=決算期末日)
-      quarterly_df: 四半期 DataFrame (index=四半期末日)
-      unit        : 売上・営業利益の単位ラベル ("億円" or "兆円")
+      annual_df : 年次 DataFrame (index=決算期末日)
+      unit      : 売上・営業利益の単位ラベル ("億円" or "兆円")
     """
     t = yf.Ticker(ticker)
 
-    _empty = {"annual_df": pd.DataFrame(), "quarterly_df": pd.DataFrame(), "unit": "億円"}
+    _empty = {"annual_df": pd.DataFrame(), "unit": "億円"}
 
     try:
         inc_a = t.income_stmt
-        inc_q = t.quarterly_income_stmt
-        bs_q  = t.quarterly_balance_sheet
+        bs_a  = t.balance_sheet
     except YFRateLimitError:
         st.warning(_RATE_LIMIT_MSG)
         return _empty
@@ -113,47 +110,23 @@ def fetch_fundamentals(ticker: str) -> dict:
         rev_a = _first(inc_a, _REVENUE_COLS)
         opi_a = _first(inc_a, _OP_INCOME_COLS)
         eps_a = _first(inc_a, _EPS_COLS)
+        eq_a  = _first(bs_a, _EQUITY_COLS) if not bs_a.empty else None
+
         for date in inc_a.columns:
-            d = pd.Timestamp(date).tz_localize(None)
+            d      = pd.Timestamp(date).tz_localize(None)
+            eq_val = _safe_get(eq_a, date)
             annual_rows[d] = {
                 "Revenue":         _safe_get(rev_a, date),
                 "OperatingIncome": _safe_get(opi_a, date),
                 "EPS":             _safe_get(eps_a, date),
-                "Price":           _price_at(price_df, d),
-            }
-    annual_df = pd.DataFrame(annual_rows).T.sort_index()
-    annual_df["PER"] = annual_df["Price"] / annual_df["EPS"].replace(0, float("nan"))
-
-    # ---- 四半期データ ----
-    # 損益計算書と貸借対照表で日付が一致しない場合があるため _safe_get で安全アクセス
-    quarterly_rows = {}
-    if not inc_q.empty:
-        eps_q = _first(inc_q, _EPS_COLS)
-        rev_q = _first(inc_q, _REVENUE_COLS)
-        opi_q = _first(inc_q, _OP_INCOME_COLS)
-        eq_q  = _first(bs_q,  _EQUITY_COLS) if not bs_q.empty else None
-
-        for date in inc_q.columns:
-            d     = pd.Timestamp(date).tz_localize(None)
-            eq_val = _safe_get(eq_q, date)
-            quarterly_rows[d] = {
-                "Revenue":         _safe_get(rev_q, date),
-                "OperatingIncome": _safe_get(opi_q, date),
-                "EPS_Q":           _safe_get(eps_q, date),
                 "BPS":             eq_val / shares if eq_val is not None else None,
                 "Price":           _price_at(price_df, d),
             }
 
-    quarterly_df = pd.DataFrame(quarterly_rows).T.sort_index()
-
-    # Trailing 12M EPS = 直近4四半期の EPS 合計 → PER
-    if "EPS_Q" in quarterly_df.columns:
-        quarterly_df["TTM_EPS"] = quarterly_df["EPS_Q"].rolling(4, min_periods=2).sum()
-        quarterly_df["PER"] = quarterly_df["Price"] / quarterly_df["TTM_EPS"].replace(0, float("nan"))
-
-    # PBR = Price / BPS
-    if "BPS" in quarterly_df.columns and "Price" in quarterly_df.columns:
-        quarterly_df["PBR"] = quarterly_df["Price"] / quarterly_df["BPS"].replace(0, float("nan"))
+    annual_df = pd.DataFrame(annual_rows).T.sort_index()
+    annual_df["PER"] = annual_df["Price"] / annual_df["EPS"].replace(0, float("nan"))
+    if "BPS" in annual_df.columns:
+        annual_df["PBR"] = annual_df["Price"] / annual_df["BPS"].replace(0, float("nan"))
 
     # 単位を決定（年次売上の最大値で判断）
     if not annual_df.empty and "Revenue" in annual_df.columns:
@@ -162,7 +135,6 @@ def fetch_fundamentals(ticker: str) -> dict:
         unit = "億円"
 
     return {
-        "annual_df":    annual_df,
-        "quarterly_df": quarterly_df,
-        "unit":         unit,
+        "annual_df": annual_df,
+        "unit":      unit,
     }
