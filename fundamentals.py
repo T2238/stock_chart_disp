@@ -10,6 +10,16 @@ import streamlit as st
 
 warnings.filterwarnings("ignore")
 
+try:
+    from yfinance.exceptions import YFRateLimitError
+except ImportError:
+    YFRateLimitError = Exception  # 古いバージョン用フォールバック
+
+_RATE_LIMIT_MSG = (
+    "Yahoo Finance のレート制限に達しました。"
+    "しばらく時間をおいてから再度お試しください。"
+)
+
 # 財務列の優先順位リスト（見つかった最初の列を使用）
 _REVENUE_COLS    = ["Total Revenue", "Operating Revenue"]
 _OP_INCOME_COLS  = ["Operating Income", "EBIT"]
@@ -66,14 +76,33 @@ def fetch_fundamentals(ticker: str) -> dict:
     """
     t = yf.Ticker(ticker)
 
-    inc_a = t.income_stmt
-    inc_q = t.quarterly_income_stmt
-    bs_q  = t.quarterly_balance_sheet
-    info  = t.info
-    shares = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding") or 1
+    _empty = {"annual_df": pd.DataFrame(), "quarterly_df": pd.DataFrame(), "unit": "億円"}
+
+    try:
+        inc_a = t.income_stmt
+        inc_q = t.quarterly_income_stmt
+        bs_q  = t.quarterly_balance_sheet
+    except YFRateLimitError:
+        st.warning(_RATE_LIMIT_MSG)
+        return _empty
+
+    # 発行済株式数: fast_info（軽量）→ info の順で取得
+    shares = 1
+    try:
+        shares = t.fast_info.shares or 1
+    except Exception:
+        try:
+            info = t.get_info()
+            shares = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding") or 1
+        except Exception:
+            pass
 
     # 株価（最大期間）
-    price_df = t.history(period="max", auto_adjust=True)
+    try:
+        price_df = t.history(period="max", auto_adjust=True)
+    except YFRateLimitError:
+        st.warning(_RATE_LIMIT_MSG)
+        return _empty
     if isinstance(price_df.columns, pd.MultiIndex):
         price_df.columns = price_df.columns.droplevel(1)
     price_df.index = price_df.index.tz_localize(None)
