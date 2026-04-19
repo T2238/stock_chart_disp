@@ -51,6 +51,16 @@ INTERVAL_OPTIONS: dict[str, str] = {
 }
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_shares_outstanding(ticker: str) -> int | None:
+    """発行済株式数を取得する。取得失敗時は None。"""
+    try:
+        info = yf.Ticker(ticker).info
+        return info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_ohlcv(ticker: str, period: str, interval: str) -> pd.DataFrame:
     df = yf.download(ticker, period=period, interval=interval,
@@ -209,7 +219,7 @@ if main_df.empty:
 
 # ---------------------------------------------------------------- メトリクス --
 if not compare_mode:
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     latest = main_df.iloc[-1]
     prev   = main_df.iloc[-2] if len(main_df) > 1 else latest
 
@@ -218,11 +228,22 @@ if not compare_mode:
     change     = close_now - close_prev
     change_pct = change / close_prev * 100 if close_prev else 0
 
+    shares = fetch_shares_outstanding(main_ticker)
+    if shares:
+        mktcap_oku = close_now * shares / 1e8
+        if mktcap_oku >= 10000:
+            mktcap_str = f"{mktcap_oku / 10000:,.0f} 兆円"
+        else:
+            mktcap_str = f"{mktcap_oku:,.0f} 億円"
+    else:
+        mktcap_str = "-"
+
     col1.metric("現在値",   f"¥{close_now:,.0f}", f"{change:+.0f}  ({change_pct:+.2f}%)")
     col2.metric("高値",     f"¥{float(latest['High']):,.0f}")
     col3.metric("安値",     f"¥{float(latest['Low']):,.0f}")
     col4.metric("出来高",   f"{float(latest['Volume']):,.0f}")
-    col5.metric("データ件数", f"{len(main_df):,} 本")
+    col5.metric("時価総額", mktcap_str)
+    col6.metric("データ件数", f"{len(main_df):,} 本")
 
 # ---------------------------------------------------------------- チャート --
 if compare_mode:
