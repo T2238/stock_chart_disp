@@ -76,8 +76,6 @@ def parse_display_code(display_code: str) -> tuple[str, str]:
     parts = display_code.split("]", 1)[1].strip().split(" ", 1)
     code = parts[0]
     name = parts[1] if len(parts) > 1 else code
-    if len(code) == 5 and code.endswith("0"):
-        code = code[:4]
     return f"{code}.T", name
 
 
@@ -110,12 +108,25 @@ with st.sidebar:
 
     # メイン銘柄
     st.subheader("メイン銘柄")
+    search_query = st.text_input(
+        "検索", placeholder="コードまたは銘柄名（例: 7203 / トヨタ）",
+        label_visibility="collapsed",
+    )
+    if search_query:
+        q = search_query.strip().lower()
+        search_options = [o for o in filtered_options if q in o.lower()]
+        if not search_options:
+            st.caption("該当銘柄なし — 全銘柄を表示")
+            search_options = filtered_options
+    else:
+        search_options = filtered_options
+
     default_idx = next(
-        (i for i, o in enumerate(filtered_options) if "7203" in o), 0
+        (i for i, o in enumerate(search_options) if "7203" in o), 0
     )
     main_display = st.selectbox(
-        "銘柄を選択（名前・コードで検索可）",
-        filtered_options,
+        "銘柄を選択",
+        search_options,
         index=default_idx,
         label_visibility="collapsed",
     )

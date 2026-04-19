@@ -142,8 +142,11 @@ def load_stocks() -> pd.DataFrame:
         df = _sample_stocks()
 
     df["Badge"] = df["MarketCode"].apply(_badge)
+    df["Code4"] = df["Code"].apply(
+        lambda c: str(c)[:4] if len(str(c)) == 5 and str(c).endswith("0") else str(c)
+    )
     df["DisplayCode"] = df.apply(
-        lambda r: f"[{r['Badge']}] {r['Code']} {r['CompanyName']}", axis=1
+        lambda r: f"[{r['Badge']}] {r['Code4']} {r['CompanyName']}", axis=1
     )
     df["YfTicker"] = df["Code"].apply(to_yf_ticker)
     return df
