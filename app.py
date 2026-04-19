@@ -272,7 +272,7 @@ else:
         show_macd=show_macd,
     )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True, key=f"chart_{main_ticker}_{period_label}_{interval_label}")
 
 # ---------------------------------------------------------------- 銘柄情報 --
 if not compare_mode:
