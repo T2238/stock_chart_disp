@@ -25,6 +25,19 @@ def _first(df: pd.DataFrame, candidates: list[str]) -> pd.Series | None:
     return None
 
 
+def _safe_get(series: pd.Series | None, key) -> float | None:
+    """Series から安全に値を取得する。キー不一致・NaN はすべて None を返す。"""
+    if series is None:
+        return None
+    try:
+        val = series.get(key)
+        if val is None or pd.isna(val):
+            return None
+        return float(val)
+    except Exception:
+        return None
+
+
 def _price_at(price_df: pd.DataFrame, date: pd.Timestamp) -> float | None:
     """指定日以前の直近終値を返す。"""
     close = price_df["Close"].squeeze()
@@ -68,38 +81,38 @@ def fetch_fundamentals(ticker: str) -> dict:
     # ---- 年次データ ----
     annual_rows = {}
     if not inc_a.empty:
+        rev_a = _first(inc_a, _REVENUE_COLS)
+        opi_a = _first(inc_a, _OP_INCOME_COLS)
+        eps_a = _first(inc_a, _EPS_COLS)
         for date in inc_a.columns:
             d = pd.Timestamp(date).tz_localize(None)
-            rev  = _first(inc_a, _REVENUE_COLS)
-            opi  = _first(inc_a, _OP_INCOME_COLS)
-            eps  = _first(inc_a, _EPS_COLS)
-            price = _price_at(price_df, d)
             annual_rows[d] = {
-                "Revenue":         float(rev[date])  if rev  is not None and not pd.isna(rev[date])  else None,
-                "OperatingIncome": float(opi[date])  if opi  is not None and not pd.isna(opi[date])  else None,
-                "EPS":             float(eps[date])  if eps  is not None and not pd.isna(eps[date])  else None,
-                "Price":           price,
+                "Revenue":         _safe_get(rev_a, date),
+                "OperatingIncome": _safe_get(opi_a, date),
+                "EPS":             _safe_get(eps_a, date),
+                "Price":           _price_at(price_df, d),
             }
     annual_df = pd.DataFrame(annual_rows).T.sort_index()
     annual_df["PER"] = annual_df["Price"] / annual_df["EPS"].replace(0, float("nan"))
 
     # ---- 四半期データ ----
+    # 損益計算書と貸借対照表で日付が一致しない場合があるため _safe_get で安全アクセス
     quarterly_rows = {}
-    if not inc_q.empty and not bs_q.empty:
-        eps_q  = _first(inc_q, _EPS_COLS)
-        eq_q   = _first(bs_q,  _EQUITY_COLS)
+    if not inc_q.empty:
+        eps_q = _first(inc_q, _EPS_COLS)
+        rev_q = _first(inc_q, _REVENUE_COLS)
+        opi_q = _first(inc_q, _OP_INCOME_COLS)
+        eq_q  = _first(bs_q,  _EQUITY_COLS) if not bs_q.empty else None
 
         for date in inc_q.columns:
-            d = pd.Timestamp(date).tz_localize(None)
-            rev  = _first(inc_q, _REVENUE_COLS)
-            opi  = _first(inc_q, _OP_INCOME_COLS)
-            price = _price_at(price_df, d)
+            d     = pd.Timestamp(date).tz_localize(None)
+            eq_val = _safe_get(eq_q, date)
             quarterly_rows[d] = {
-                "Revenue":         float(rev[date])     if rev     is not None and not pd.isna(rev[date])     else None,
-                "OperatingIncome": float(opi[date])     if opi     is not None and not pd.isna(opi[date])     else None,
-                "EPS_Q":           float(eps_q[date])   if eps_q   is not None and not pd.isna(eps_q[date])   else None,
-                "BPS":             float(eq_q[date]) / shares if eq_q is not None and not pd.isna(eq_q[date]) else None,
-                "Price":           price,
+                "Revenue":         _safe_get(rev_q, date),
+                "OperatingIncome": _safe_get(opi_q, date),
+                "EPS_Q":           _safe_get(eps_q, date),
+                "BPS":             eq_val / shares if eq_val is not None else None,
+                "Price":           _price_at(price_df, d),
             }
 
     quarterly_df = pd.DataFrame(quarterly_rows).T.sort_index()
