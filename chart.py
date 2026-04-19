@@ -1,12 +1,36 @@
 """
 Plotly チャート生成モジュール
 """
+from datetime import timedelta
+
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from indicators import calc_ma, calc_bollinger, calc_rsi, calc_macd
 from config import MA_CONFIGS
+
+# サイドバーの期間ラベル → 初期表示の遡り日数
+_PERIOD_DAYS: dict[str, int | None] = {
+    "1ヶ月":  31,
+    "3ヶ月":  92,
+    "6ヶ月":  183,
+    "1年":    365,
+    "3年":    365 * 3,
+    "5年":    365 * 5,
+    "10年":   365 * 10,
+    "最大":   None,
+}
+
+
+def _xrange(index: pd.Index, period_label: str) -> list[str] | None:
+    """Plotly の初期 x 軸範囲 [start, end] を返す。最大の場合は None。"""
+    days = _PERIOD_DAYS.get(period_label)
+    if days is None:
+        return None
+    end   = index[-1]
+    start = end - timedelta(days=days)
+    return [str(start.date()), str(end.date())]
 
 # 陽線: 赤、陰線: 青（日本標準）
 COLOR_UP   = "#EF4444"
@@ -54,6 +78,7 @@ def _bar_colors(open_s: pd.Series, close_s: pd.Series) -> list[str]:
 def build_candlestick_chart(
     df: pd.DataFrame,
     name: str,
+    period_label: str = "1年",
     show_ma: bool = True,
     show_bb: bool = False,
     show_rsi: bool = False,
@@ -206,13 +231,15 @@ def build_candlestick_chart(
         margin=dict(l=70, r=20, t=50, b=20),
     )
 
-    # 主軸 X にレンジセレクタ
+    # 主軸 X にレンジセレクタ + 初期表示範囲
+    xr = _xrange(df.index, period_label)
     fig.update_xaxes(
         rangeselector=dict(
             buttons=RANGE_BUTTONS,
             bgcolor="#1F2937",
             activecolor="#374151",
         ),
+        range=xr,
         gridcolor=COLOR_GRID,
         row=1, col=1,
     )
@@ -228,7 +255,7 @@ def build_candlestick_chart(
     return fig
 
 
-def build_comparison_chart(dfs: dict[str, pd.DataFrame]) -> go.Figure:
+def build_comparison_chart(dfs: dict[str, pd.DataFrame], period_label: str = "1年") -> go.Figure:
     """複数銘柄・指数のリターン率比較チャート（起点=0%）"""
     fig = go.Figure()
 
@@ -281,5 +308,12 @@ def build_comparison_chart(dfs: dict[str, pd.DataFrame]) -> go.Figure:
         ),
         yaxis=dict(gridcolor=COLOR_GRID),
     )
+
+    # 初期表示範囲を設定（最初のデータの index を使用）
+    first_df = next((df for df in dfs.values() if df is not None and not df.empty), None)
+    if first_df is not None:
+        xr = _xrange(_normalize_df(first_df)["Close"].squeeze().dropna().index, period_label)
+        if xr:
+            fig.update_xaxes(range=xr)
 
     return fig

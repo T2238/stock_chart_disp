@@ -178,14 +178,15 @@ with st.sidebar:
     st.divider()
 
     # 表示期間・足種
-    st.subheader("表示期間")
+    st.subheader("初期表示期間")
     period_label = st.select_slider(
         "期間",
         options=list(PERIOD_OPTIONS.keys()),
         value="1年",
         label_visibility="collapsed",
     )
-    period = PERIOD_OPTIONS[period_label]
+    # データは常に最大期間で取得し、チャート内ボタンで自由に切替可能にする
+    period = "max"
 
     interval_label = st.radio(
         "足種",
@@ -259,11 +260,12 @@ if compare_mode:
     if len(all_dfs) < 2:
         st.info("比較対象を1つ以上選択してください。")
 
-    fig = build_comparison_chart(all_dfs)
+    fig = build_comparison_chart(all_dfs, period_label=period_label)
     st.caption(f"起点（期間開始日）を 0% として正規化したリターン率の推移")
 else:
     fig = build_candlestick_chart(
         main_df, main_name,
+        period_label=period_label,
         show_ma=show_ma,
         show_bb=show_bb,
         show_rsi=show_rsi,
