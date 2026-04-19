@@ -102,10 +102,22 @@ def _sample_stocks() -> pd.DataFrame:
     return df
 
 
+def _get_api_key() -> str:
+    """st.secrets → 環境変数 の順で J-Quants APIキーを取得する。"""
+    try:
+        val = st.secrets.get("JQUANTS_API_KEY", "")
+        if val:
+            return val
+    except Exception:
+        pass
+    return os.getenv("JQUANTS_API_KEY", "")
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_stocks() -> pd.DataFrame:
     """銘柄リストを返す。CSV→API→サンプルの順にフォールバック。"""
-    from config import JQUANTS_API_KEY, STOCKS_CSV_PATH
+    from config import STOCKS_CSV_PATH
+    JQUANTS_API_KEY = _get_api_key()
 
     df: pd.DataFrame | None = None
 

@@ -2,4 +2,4 @@
 __pycache__/
 *.pyc
 data/stocks.csv
-.streamlit/
+.streamlit/secrets.toml
